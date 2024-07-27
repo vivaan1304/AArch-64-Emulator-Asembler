@@ -1,0 +1,294 @@
+\documentclass[9pt,a4paper,twoside]{tau-class/tau}
+
+\journalname{COMP40009, Assessed C Laboratory}
+\title{ARMv8 AArch64 – Assembler and Emulator}
+
+\author{Ioannis Defteras (ind22), Pranay Padavala (pp1523), Vivaan Gupta (vg723), Yash Shah (yrs23)}
+
+\institution{Imperial College London}
+\footinfo{COMP40009}
+\theday{June, 2024}
+\course{Assessed C Laboratory}
+\setlength{\parskip}{4pt}
+\setcounter{tocdepth}{2} 
+
+
+\begin{abstract}    
+    This report provides a comprehensive account of Parts 2, 3, and 4 of our C group project, which involved developing an assembler for the A64 assembly language, creating a program to blink an LED on a Raspberry Pi, and implementing a custom extension. The project was systematically divided into key components, each undertaken by different team members. The following sections offer an in-depth exploration of each aspect, highlighting our collective efforts and individual contributions. 
+\end{abstract}
+
+\begin{document}
+		
+    \maketitle 
+    \thispagestyle{firststyle} \tauabstract
+    \tableofcontents
+
+\section{Introduction}  
+    \taustart{T}his project explores a subset of the A64 Reduced Instruction Set Computer (RISC) architecture on the 64-bit mode of the ARMv8-A architecture. The chosen hardware is a Raspberry Pi 3B, equipped with a Broadcom BCM2837 system on a chip (SoC) and a quad-core ARMv8 Cortex-A53 processor clocked at 1.2 GHz. The project is divided into four parts: 
+    
+    \textbf{Part I: AArch64 Emulator }    
+    This section entails the design and implementation of an AArch64 emulator. The emulator's architecture will be documented in this report, outlining the chosen approach for simulating the execution of an AArch64 binary file.
+    
+    \textbf{Part II: AArch64 Assembler }
+    The objective of this part is to develop an AArch64 assembler. This assembler will translate AArch64 assembly source code containing A64 instructions into a binary executable compatible with the emulator created in Part I. 
+    
+    \textbf{Part III: RPI GPIO Control Program }    
+    This section involves the creation of an A64 assembly program specifically designed to control the behavior of an LED connected to the Raspberry Pi's GPIO pins via a breadboard.  The part will leverage the resources provided, which include the Raspberry Pi itself, an SD card, power supply, HDMI cable, breadboard, LEDs, resistors, and connecting wires.  
+    
+    \textbf{Part IV: Extension }     
+     This section provides an opportunity for independent exploration. We are encouraged to propose and implement an extension of their choice that builds upon the core concepts explored in the previous parts.
+     
+\section{Assembler}
+    Our assembler was designed to convert A64 assembly language instructions into machine code, utilizing a two-pass assembly process. The first pass builds a symbol table associating labels with memory addresses. The second pass reads each instruction and directive to generate the corresponding binary encoding. The details of this two-pass assembly process are outlined below. 
+
+    \subsection{Symbol Table Design}
+    The development process commenced with constructing a symbol table abstract data type. This table tracks labels and their corresponding addresses, facilitating label-based references during machine code generation. We implemented this as a linked list, where each \texttt{symbol} is a structure containing a string \texttt{label} , an integer \texttt{address}, and a pointer to the next \texttt{symbol}. The symbol table structure itself includes a pointer to the latest element added to the list, referred to as the \texttt{head}, and the total number of elements in the list.  
+
+    When inserting a new symbol into the symbol table, we allocated the necessary memory using \texttt{malloc} and stored a duplicate of the label name along with its address. The pointers were updated accordingly: the \texttt{head} was set to the new \texttt{symbol}, and the new \texttt{symbol}'s \texttt{next} property pointed to the previous \texttt{head}. We also wrote a function to look up a \texttt{symbol} in the symbol table by iterating through the linked list from the head to the end, comparing the \texttt{labelToSearchFor} with the \texttt{currentLabel} at each step. Additionally, we created functions to print and free the symbol table. 
+
+    \subsection{File reader and instruction parser}
+    The assembler begins by creating an assembly (.s) file reader, which can send each line to the parser. The instruction parser can convert the string line into an instruction for us to use and handles empty lines appropriately. 
+    
+    \subsection{Tokenizer} 
+    Next, we developed a tokenizer to parse the input assembly code into manageable pieces, known as \texttt{token}s. Each \texttt{token} represents a meaningful element, such as an opcode, register, immediate value, or label. We utilised the \texttt{strtok\_r} function for this task, ensuring we can split the input according to a given delimiter, as seen in our implementation. 
+
+    \subsection{Syntax Analysis}  
+    Following tokenization, the assembler performs syntax analysis to verify that the instructions are correctly structured. This phase ensures that the grammatical structure of the tokens adheres to the A64 instruction set specifications. 
+
+    \subsection{Instruction assemblers}
+    In the code generation phase, the assembler translates the validated instructions into their corresponding machine code. Each instruction type—whether it be data processing, branching, or memory operations—has a specific binary format. To handle this, we created a dedicated instruction assembler for each type, and helper functions to return binary values of operands common between different types of instructions. 
+    
+    The assembler constructs these binary representations based on the instructions and their operands. We also created many helper functions as different instructions share common components, such as the last 10 bits which are the registers found in the first two operands of instructions. Additionally, helpers were created to translate values to n-bit signed binary. Using these helpers we also implemented parsing the  \texttt{.int} directory.       
+    
+    \subsection{Implementation Challenges}   
+    One significant challenge we encountered was managing the various instruction formats and ensuring accurate binary representation. To address this, we developed helper functions for each instruction type, which streamlined the code generation process and enhanced accuracy. Further, the helper functions allowed for better modularization and succinct code.  
+
+    \subsection{Testing}
+    We tested the assembler by using the test suite provided and verifying the generated machine code. Similarly to part 1 we corrected bugs and retested until our assembler was working as expected.
+
+    \section{RPI GPIO Control Program}
+    The goal was to create an assembly program that blinks an LED connected to a GPIO pin on the Raspberry Pi. Below is a detailed explanation of our implementation process. 
+
+    \subsection{Hardware setup}
+    We connected an LED to GPIO pin 21 on the Raspberry Pi, with a resistor in series to limit the current. The other terminal of the LED was connected to a ground pin on the Pi.  
+    
+    \subsection{Program Functionality}      
+    The assembly program was designed to: 
+    
+    \noindent 1. Set the GPIO pin as an output. 
+    \newline 2. Enter an infinite loop where it: 
+    \begin{itemize}
+        \item Sets the pin high to turn on the LED.
+        \item Waits for a fixed duration.
+        \item Sets the pin low to turn off the LED.
+        \item Waits again for a fixed duration.
+        \item Return to the start of the loop.
+    \end{itemize}
+    
+    \subsection{Register initialisation}   
+    This program initializes registers \texttt{w1} – \texttt{w6} with the necessary addresses and values using the \texttt{.int} directive we implemented as part of the assembler. The register \texttt{w1} is loaded with the address of \texttt{GPFSEL2} to set the 21st GPIO pin. The register \texttt{w2} is loaded with a maximum value for the delay counters indicating the amount of time the LED spends between the on and off states. The registers \texttt{w3} and \texttt{w4} are loaded with the addresses of \texttt{GPSET0} and \texttt{GPCLR0}, respectively, to control the GPIO pin. \texttt{w5} is loaded with the value to set the GPIO pin to a high value to be stored in the \texttt{GPSET0} and \texttt{GPCLR0} to turn the LED on or off. \texttt{w6} is loaded with the GPIO pin number to set the selected pin in the address of \texttt{GPFSEL2} to indicate it is an output pin, thus the output signal should be set through it.  
+    
+    \subsection{LED control with infinite loop} 
+    The program enters an infinite loop where it alternates between setting the GPIO pin high and low, with delays in between. The pin is set high by storing \texttt{w5} in \texttt{GPSET0}. The program is delayed for a fixed count to keep the LED on. The pin is then set low by storing \texttt{w5} in \texttt{GPCLR0}. Another busy-wait loop delays the program again to keep the LED off before repeating the cycle. 
+    
+    \subsection{Assembly and Execution}   
+    We then assembled the program using our assembler built in part 2 and loaded the file onto the SD card under the name kernel8.img, a file which should be run by the raspberry pi when it boots up. 
+    
+    \subsection{Implementation challenges}  
+    The largest implementation challenge we faced was the debugging of the entire process. The only indication we received as to the success of the program was whether the LED was illuminated hence making debugging quite challenging. However, using our emulator from part 1 we could see the state of the program and track all errors.  Using this process, we were able to get the LED blinking correctly.  
+
+    \subsection{Testing}
+    We verified the LED blinking program by running it on the Raspberry Pi and observing the LED behaviour. As mentioned previously we used our emulator to test the register and non-zero memory and adjust our program accordingly. When  the LED successfully blinked on and off as expected in an infinite loop, confirming the program's correctness. 
+
+    \section{Extension: (Un)fair Blackjack}
+    \subsection{Extension Description} 
+    
+    Our extension features an innovative adventure game inspired by the card game blackjack, specifically designed to assist recovering gambling addicts. In this game, the user starts with an initial sum of virtual money and is challenged to "take down" a virtual casino by reaching a specified cash checkpoint within a set deadline. The user can navigate different paths and purchase various skills to aid in their quest to achieve this goal. 
+    
+    \subsection{Example Usage} 
+    
+    This application is meticulously designed to support individuals recovering from gambling addiction. Traditional gambling games can often trigger addictive behaviors, but our game uses fake money and introduces entirely new rules and features to disrupt this cycle. By transforming blackjack into an adventure game, we aim to create a therapeutic tool that gradually dissociates players from the compulsive aspects of gambling. 
+    
+    \subsection{Key Features} 
+    
+    \subsubsection{New Rules and Features}
+    By incorporating unique gameplay elements, the game differs significantly from traditional blackjack, reducing the risk of triggering old gambling habits. 
+    
+    \subsubsection{Adventurous Narrative}
+    The game's storyline involves taking down a casino through strategic decisions and skill purchases, which shifts the focus from mere card play to a broader, more engaging adventure. 
+    
+    \subsubsection{Skill Development}
+    Players can purchase and develop various skills within the game, promoting strategic thinking and planning, which can be therapeutic and build confidence. 
+    
+    \subsubsection{Goal-Oriented Play}
+    The structure of reaching a cash checkpoint by a deadline introduces clear goals and milestones, which can provide a sense of accomplishment and progress. 
+
+    \subsection{Potential Benefits}
+    
+    \subsubsection{Detachment from Real Gambling}
+    The use of fake money ensures there are no real financial stakes involved. This helps players detach from the high-risk nature of real gambling.
+    
+    \subsubsection{Safe Environment}
+    The virtual setting offers a safe space where players can engage in the gameplay without the risks associated with real gambling. 
+    
+    \subsubsection{Focus on Recovery}
+    The game's design emphasizes gradual transition away from gambling, helping players to rewire their habits and focus on healthier activities. 
+       
+    \subsubsection{Reduces Cravings}
+    By altering the gameplay mechanics, the game aims to reduce cravings associated with traditional gambling. 
+    
+    \subsubsection{Encourages Healthy Distraction} 
+    The engaging nature of the game provides a healthy distraction, keeping the mind occupied and away from thoughts of real gambling. 
+    
+    This holistic approach ensures that the game is not just a diversion but a purposeful tool in the recovery process. By integrating elements of strategy, skill-building, and adventure, the game provides a comprehensive support system for individuals on their journey to overcome gambling addiction. 
+    
+    \subsection{Design and Implementation} 
+    
+    \subsubsection{Card Representation}    
+    The deck is represented as an integer array. Each card is encoded with a value between 301 (Ace of Hearts) and 613 (King of Spades). The hundredth digit represents the suit (1 for Hearts, 2 for Diamonds, etc.), while the remaining two digits represent the card value. Macros are used to define how cards are printed, displaying the suit and value in a user-friendly format. 
+    
+    \subsubsection{Shuffling}  
+    A new deck (\texttt{shuffledDeck}) is created. Cards are randomly selected from the original deck and inserted into the shuffled deck one by one. This simulates shuffling. 
+    
+    \subsubsection{Players structure}
+    Both the player and dealer are represented by the \texttt{Player} struct. This struct stores information like:  
+    \begin{itemize}
+        \item Sum of their current hand
+        \item Array of cards in their hand
+        \item Remaining cash
+        \item \texttt{Tactics} (represented by a separate struct)
+    \end{itemize}
+    
+    \subsubsection{Tactics Structure}    
+    The \texttt{Tactics} struct is an array of boolean flags. Each flag corresponds to a specific dealer tactic (e.g., \texttt{removeFace} for removing the player's face cards). Players can purchase some of these tactics as power-ups in the shop. The dealer's tactics are randomised each round, with one flag becoming true. 
+
+    \subsubsection{(Un)fair Tactics}
+    The dealer has a variety of unfair tactics at their disposal, significantly impacting the game. These tactics range from exceeding 21 on their own score to manipulating the deck by removing the player's high cards or forcing them to draw extra cards. The dealer can also control the flow of information, hiding the value of drawn cards or even using their Ace as any desired number. In extreme cases, the dealer might force the player to lose a day entirely or manipulate both hit and stand options to disadvantage the player. 
+    
+    However, there's a chance the dealer might show mercy, either by offering a glimpse of the next card or by not taking the player's money even after a loss. While the player has the option to surrender a hand halfway through \& recoup half their bet, use their Ace as any number, gain insight into the next card or gain a day.  
+    
+    \subsubsection{Handling Ace}   
+    If the player has the \texttt{anyAce} power-up, they can choose to change the Ace's value to anything between 1 and 11. Otherwise, they decide whether to value the Ace as 1 or 11. If the dealer has the \texttt{anyAce} power-up, it can arbitrarily change the Ace's value to make their hand total 21. Otherwise, the dealer calculates the most beneficial value for the Ace (either 1 or 11) based on their current hand total. 
+    
+    \subsubsection{Player Decisions} 
+    The player has agency through functions like \texttt{makeDouble} and \texttt{playerDrawsCards}. These allow strategic decisions during their turn, like doubling the bet for a bigger win or using the "insight" power-up to see the next card.  
+    
+    \subsubsection{Evaluating Outcomes} 
+    Evaluating the outcome is handled by \texttt{checkBust} which checks if a player or dealer has gone bust (exceeding 21) and \texttt{performFinalChecks} that analyses the final game state. It considers factors like blackjack, player and dealer hand totals, and any unfair advantages the dealer might have used. This function ultimately determines the winner and distributes the pot accordingly (functions like \texttt{playerWins}, \texttt{dealerWins}, and \texttt{tie}). 
+    
+    \subsubsection{Dealer's Tactics and Showmanship}  
+    The dealer's AI and tactics are implemented through functions like \texttt{warnAboutHighSum} and \texttt{dealerDrawsAdditionalCards}. The former discourages the player from drawing another card, while the latter simulates the dealer's logic for drawing cards based on a pre-programmed strategy. \texttt{displayDealerCards} and \texttt{dealNextCard} add a layer of showmanship. The first reveals the dealer's cards with a dramatic pause, while the latter can hide the card value from the player if the dealer has a specific tactic active.
+    
+    \subsection{Challenges faced} 
+  
+    \subsubsection{Variable Difficulty}
+    We experimented with various difficulty levels. Lowering difficulty implied reducing the frequency of unfair dealer tactics and lowering the daily quota, making the game more forgiving for beginners. 
+    
+    \subsubsection{Power-Up System} 
+    Balancing how players can accumulate excess money to purchase power-ups that counter the dealer's unfair tactics for a limited time. Examples include "See Next Card," "Surrender Hand," or "Use Overpowered Ace." 
+    
+    \subsubsection{Progressive Quota}
+    The daily quota increases exponentially but at a slower rate than the power-up cost. This allows players to gradually increase their earnings while unlocking more powerful tools to overcome the dealer's advantage. 
+    
+    \subsubsection{Balancing the unfair tactics} 
+    Making the dealer's advantage too strong can lead to frustration, while making it too weak can trivialize the game. We playtested and adjusted the probability of each unfair tactic to create a fair but challenging experience. 
+    
+    \subsubsection{Pacing and Tension} 
+    Despite the quota system adding pressure, the core gameplay loop of blackjack was designed to remain engaging. 
+    
+    \subsection{Future features roadmap} 
+    
+    \subsubsection{Achievements System}
+    Players can unlock achievements for reaching milestones like winning a certain number of games or surviving a specific number of days. 
+    
+    \subsubsection{Leaderboard}
+    Players can compete for the longest days lasted on a leaderboard. 
+    
+    \subsubsection{Customization}
+    Allow players to personalize their experience with different starting card decks and background themes. 
+    
+    \subsection{Testing} 
+    
+    \subsubsection{Unit Testing} 
+    Individual modules like the card deck, blackjack logic, and power-up effects were unit tested to ensure proper functionality. 
+    
+    \subsubsection{Playtesting} 
+    Extensive playtesting was conducted with users to identify balance issues, bugs, and areas for improvement in terms of gameplay and user interface. 
+    
+    \subsubsection{Metrics}
+    We tracked metrics like win rate, average daily earnings, and power-up usage to assess the effectiveness of the difficulty levels and the power-up system. 
+    
+    \subsection{Evaluation} 
+    
+    The success of the game will be evaluated based on user feedback, play time metrics, and completion rates. Based on the evaluation results, we can further refine the difficulty levels, adjust the power-up system, and add new content to keep players engaged. 
+
+    \section{Group Reflection}
+    Working as a group presented both opportunities and challenges. Our communication was generally very effective, primarily using online tools like Discord for regular updates and discussions. Additionally, every two days, we scheduled in-person meetings, often booking a room in the library or another suitable location on campus. This blend of online and in-person interactions facilitated better teamwork for us and efficient idea sharing.  
+
+    We divided tasks based on individual strengths and the logical splitting of each task, which enhanced our efficiency. However, coordinating code integration posed some challenges due to differing coding styles and schedules. 
+    
+    To address these challenges, we often worked in pairs or small sub-groups, either through calls or in-person meetings without requiring the entire team to be present. This approach allowed us to find convenient times for both members involved and increased the progress we got made when coding, since we could bounce others off each other more quickly than in the whole group. This method proved particularly effective in overcoming scheduling conflicts and integrating diverse coding styles. 
+    
+    We maintained continuous communication through WhatsApp, ensuring daily updates and quick resolutions to any arising issues. In addition to our bi-daily meetings, we also used a shared document to track progress and task completion. This approach kept everyone aligned and aware of their responsibilities. When some team members were busy, others stepped in to maintain momentum and push the project forward. 
+    
+    Our communication strategy, which combined regular online updates, bi-daily in-person meetings, and flexible sub-group collaborations, was key to our project's success. This ensured that we could effectively manage tasks, integrate code efficiently, and maintain a high level of teamwork throughout the project. 
+
+    \section{Improvements for Future Projects} 
+
+    \subsection{Code Review Process}
+    To implement a stricter code review process in order to ensure consistency. By establishing a more rigorous review protocol between all four team members, we can maintain uniform coding standards and catch any potential issues early. 
+
+    \subsection{Version Control with Git}
+    Use git version control more effectively to manage code integration. We realised that only working on the master branch caused issues during the final merge. In the future, creating and working on feature branches will facilitate smoother integration and allow us to isolate and resolve conflicts more efficiently.   
+
+    \subsection{Collaborative Testing and Debugging}
+    Allocate more time for collaborative testing and debugging. For Parts 2 and 3, we often worked on debugging individually, which meant when one team member encountered an error, they would work on it for a while, and if unresolved, another team member would take over. This approach sometimes hindered the sharing of key observations and developments. 
+    
+    In future projects, we will dedicate more time to group debugging sessions, ensuring continuous communication and collective problem-solving. This will enhance our ability to identify and address issues more effectively.
+
+    \section{Individual Reflections}    
+    
+    \subsection{Yash Shah}
+    Working on this C project was a challenging yet rewarding experience for me. Prior to this project, I had no experience in C programming, and I found the initial stages, particularly reading the specification, to be quite daunting. However, the collaborative nature of the group project proved to be incredibly beneficial. Engaging with my team members and sharing ideas was immensely valuable. It made me realize that while individual effort is important, collaboration can significantly enhance problem-solving and productivity!  
+    
+    My main contributions included focusing on the overall structure of tasks and working on features such as the symbol Abstract Data Type (ADT) and instruction handlers. These tasks helped me understand the importance of smaller components in the larger codebase and the need for attention to detail and careful planning in software development.  
+    
+    Additionally, I took on the responsibility of handling documentation, which taught me the value of clear and concise reporting. My organizational skills ensured our documentation was well-structured and our testing process was thorough.      
+    
+    However, I identified areas for improvement, particularly in my debugging skills. There were instances when I faced tough errors and had to rely on my teammates for support. In future projects, I aim to be more involved in the testing phase to gain a holistic view of the development process and to improve my technical skills further.    
+    
+    \subsection{Ioannis Defteras}
+    
+    The C project has by far exceeded my expectations in terms of difficulty and with respect to knowledge gained and skills learnt.  As C differs substantially from any other language I had used in the past, completing the project was a challenge. The fact that we were building something completely from the ground up with no provided functions, and no specification in the case of the extension, was hard but allowed me to develop a holistic approach. 
+    
+    Personally, I mainly focused on the second pass of the assembler in part 2, implementing the assembling of all the different types of instructions along with the helper which were required. Additionally, as I undertook a large part of the debugging, I had a chance to review my teammates code and ensure that our individual parts worked together well. The journey of completion for parts 1 and 2 strengthened my understanding of low-level processes as well as understanding the importance of writing clear, succinct code to help my teammates understand and develop it further. 
+    
+    The third part of the project was particularly challenging given I had never written an assembly program and had no easy way to debug it. As this was something new for most of my team, we were able to learn together and overcome the challenge. I found this part, despite being the smallest in terms of code, to be the most rewarding as we developed a practical application to use our assembler on and had a chance to use real hardware. I gained invaluable experience with the Raspberry Pi and circuit design as well as the irreplicable feeling of finally getting the LED to blink. 
+    
+    The extension was by far the greatest challenge for me due to the lack of instruction. My main responsibilities included implementing the shop and the skills the user learnt. Additionally, I developed a sleep function which allowed me to learn how to use C to develop programs which can run on different operating systems with the same result. The lack of a specification while challenging at first, gave me the freedom to consider the optimal method of design and implement it.  
+    
+    \subsection{Pranay Padavala}
+    
+    This project has been a valuable learning experience, highlighting several key takeaways. I've gained a newfound appreciation for the role of a team manager. The ability to keep everyone focused on deadlines and ensure consistent progress is crucial for project success. It led me to realise the importance of maintaining clean git repositories and writing clean code. Code that is not only understandable by myself but also by my teammates fosters better collaboration and reduces maintenance headaches down the road. 
+    
+    Working on the emulator and assembler significantly enhanced my grasp of low-level computing. It solidified connections between concepts learned in the computing architecture module. Implementing memory, load/store operations, and various assembler instructions honed my expertise in those concepts and several others like bit manipulation. 
+    
+    Getting an LED to blink using our custom assembler program was an arduous journey. The potential failure points were numerous, and debugging methods were scarce. It demanded a thorough understanding of the Raspberry Pi, its GPIO pins, and how assembly programs interact with them for us to succeed. We had to meticulously rule out assembly code flaws, assembler bugs and hardware defects. This part was a testament to our resilience, and the moment the LED flickered to life was a truly rewarding experience. 
+    
+    The extension was by far my favourite part as we had free reign over what we could do and I had ideas brimming that would expand our extension that was already shaping up to be really cool. Drawing upon my background in game development and storytelling, I aimed to create a vibrant and engaging experience that players would find themselves wanting to revisit. Successfully building something I could be proud of, especially in a language I'd only recently begun learning, was an immensely satisfying accomplishment. 
+    
+    \subsection{Vivaan Gupta} 
+    
+    The C project was both a rewarding and challenging experience, providing numerous learning opportunities. We began by thoroughly reading the project specifications and searching for important implementation details that might not be immediately apparent, highlighting the importance of attention to detail. Additionally, working with tools like CMake and Git helped me acquire essential industry skills.
+
+    I was responsible for implementing the general structure of the Emulator and the handle immediate function. This task taught me how to model C projects effectively and approach problems from scratch. It also refreshed my knowledge of computer architecture and improved my team coordination skills through task division among members. I also learned conflict resolution by addressing and resolving team conflicts amicably. Debugging integer overflow issues underscored the importance of test-driven development (TDD) and common debugging techniques.
+    
+    In the second part of the project, the assembler, I contributed to the general structure and the implementation of the abstract data type (ADT). Working on the ADT taught me how to choose appropriate data structures for specific use cases, such as a dictionary of key-value pairs. Implementing the two-pass technique provided insights into common methods used in creating assemblers.
+    
+    In part 3, I focused on code refactoring, which helped me learn how to identify and fix minor bugs that might be difficult to spot initially.
+    
+    During the extension phase, I developed the game's currency system. This task allowed me to exercise creative freedom in designing a robust currency system that met the project's requirements. Deciding whether to store the pot size as an integer or as part of a struct, among other design decisions, taught me valuable lessons about implementing individual components within larger projects.
+    
+    \section{Conclusion} 
+    This project was a significant learning experience, enhancing our understanding of C, assembly programming and hardware interaction with the Raspberry Pi 3. Despite challenges along the process, we hope that our collaborative effort resulted in a successful implementation. We look forward to applying these lessons to future projects. 
+\end{document}

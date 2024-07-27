@@ -1,0 +1,134 @@
+\documentclass[9pt,a4paper,twoside]{tau-class/tau}
+
+\journalname{COMP40009, Assessed C Laboratory}
+\title{ARMv8 AArch64 – Assembler and Emulator}
+
+\author{Ioannis Defteras (ind22), Pranay Padavala (pp1523), Vivaan Gupta (vg723), Yash Shah (yrs23)}
+
+\institution{Imperial College London}
+\footinfo{COMP40009}
+\theday{June, 2024}
+\course{Assessed C Laboratory}
+\setlength{\parskip}{5pt}
+
+
+\begin{abstract}    
+    This report delves into the management and planning strategies employed for the development of the AArch64 emulator.  Here, we explore the team structure, communication methods, and risk mitigation strategies implemented to ensure a successful and efficient development process. We will also discuss the design choices made for the emulator architecture, with a particular focus on identifying reusable components that will benefit the development of the AArch64 assembler in Part 2.
+\end{abstract}
+
+\begin{document}
+		
+    \maketitle 
+    \thispagestyle{firststyle} \tauabstract
+    \tableofcontents
+
+\section{Introduction}  
+    \taustart{T}his project explores a subset of the A64 Reduced Instruction Set Computer (RISC) architecture on the 64-bit mode of the ARMv8-A architecture. The chosen hardware is a Raspberry Pi 3B, equipped with a Broadcom BCM2837 system on a chip (SoC) and a quad-core ARMv8 Cortex-A53 processor clocked at 1.2 GHz. The project is divided into four parts: 
+    
+    \textbf{Part I: AArch64 Emulator }    
+    This section entails the design and implementation of an AArch64 emulator. The emulator's architecture will be documented in this report, outlining the chosen approach for simulating the execution of an AArch64 binary file.
+    
+    \textbf{Part II: AArch64 Assembler }
+    The objective of this part is to develop an AArch64 assembler. This assembler will translate AArch64 assembly source code containing A64 instructions into a binary executable compatible with the emulator created in Part I. 
+    
+    \textbf{Part III: RPI GPIO Control Program }    
+    This section involves the creation of an A64 assembly program specifically designed to control the behavior of an LED connected to the Raspberry Pi's GPIO pins via a breadboard.  The part will leverage the resources provided, which include the Raspberry Pi itself, an SD card, power supply, HDMI cable, breadboard, LEDs, resistors, and connecting wires.  
+    
+    \textbf{Part IV: Extension }     
+     This section provides an opportunity for independent exploration. We are encouraged to propose and implement an extension of their choice that builds upon the core concepts explored in the previous parts.
+     
+\section{Project Management}
+
+    \subsection{Team Structure and Responsibilities}
+
+        The initial development phase of the AArch64 emulator adopted an iterative approach. The team commenced by co-implementing the binary file loader and register structure. 
+        
+        The fetch and decode stages of the pipeline were developed concurrently. Following the AArch64 instruction set specification, instruction functionality was then divided amongst team members:
+        
+        \begin{enumerate}
+            \item Vivaan Gupta: Data Processing Instructions (Immediate)
+            \item Yash Shah: Data Processing Instructions (Registers) and Shifts
+            \item Pranay Padavala: Single Data Transfer Instructions
+            \item Ioannis Defteras: Branching Instructions
+        \end{enumerate}
+
+    \subsection{Communication and Collaboration Strategies}
+
+         Utilizing GitLab for version control and collaboration, team members worked in parallel to implement the execution portion of the pipeline, leveraging their respective instruction set implementations. 
+         
+         Upon completion of the output file function, our debugging phase commenced. During this stage, team members provided mutual assistance in debugging their assigned sections. Communication was facilitated through a dedicated WhatsApp group, where project meetings were also coordinated.
+
+ 
+\section{Risk Management and Mitigation Strategies}
+
+    \subsection{Identification of Potential Challenges}
+        We begin by outlining the potential challenges we anticipate encountering throughout the remaining project phases.  
+        
+        \textbf{Compiler Construction }
+        We anticipate difficulties in constructing the compiler using an internal representation and in the two-pass assembly process, involving the creation of a symbol table followed by binary encoding generation. Determining the optimal use of function pointers as an alternative to switch statements will also require careful consideration.  
+        
+        \textbf{Integration with External Hardware }
+        Part 3 introduces the challenge of interfacing the software with external hardware components. Specifically, controlling the LED via the Raspberry Pi's GPIO pins requires working with the LED and resistor to create a functional circuit. 
+        
+        \textbf{Open-Ended Exploration }
+        Part 4 presents a challenge due to the absence of predefined specifications. Effective code management using Git version control and branching will be crucial for this open-ended development process.
+        
+        \textbf{Testing Unspecified Functionality }
+        The absence of a pre-defined test suite in Part 4 creates an additional hurdle. To mitigate this challenge, we plan to adopt a modular development approach, implementing and testing smaller functionalities independently before integrating them into a larger system. This incremental testing strategy will help to ensure the overall robustness of the final solution.
+        
+    \subsection{Mitigation Strategies for Identified Risks}
+        Having identified potential roadblocks, this section details the mitigation strategies we will employ to address each challenge.
+        
+        \textbf{Thorough Documentation and Communication}
+        To address potential challenges across all parts of the project, we will prioritize clear and comprehensive documentation, that can aid in mitigating misunderstandings within the team. Regular and open communication will also be essential for ensuring everyone is on the same page.  
+        
+        \textbf{Leveraging Existing Resources}
+        To overcome the challenges associated with compiler construction, we will leverage online resources and consult with instructors to gain a deeper understanding of internal representation and the appropriate use of function pointers.  
+        
+        \textbf{Phased Learning}
+        For Part 3, we will capitalize on a team member's experience of the Raspberry Pi. Their expertise will be instrumental in guiding the team through the initial stages and building a foundational understanding. We will then progress to more complex tasks as our confidence and knowledge base solidify.  
+        
+        \textbf{Modular Development}
+        As mentioned previously, we will adopt a modular development approach with rigorous testing at each stage. This strategy will enable us to isolate and address any issues that may arise early in the development process.
+        
+\section{Emulator Design}   
+
+    \subsection{Emulator Architecture Overview}
+        We use \texttt{get-register} to retrieve a pointer to the specific register we are updating. For error handling, we employ \texttt{throw-error} to generate descriptive messages when something goes wrong. The \texttt{get-bits} function helps us extract a specified range of bits from a number, which is often necessary for dealing with instructions that have multiple fields encoded in a single word. To maintain the correct value for signed numbers, we use \texttt{sign-extend-to-64} to extend a smaller integer to fit a 64-bit integer.
+
+        The \texttt{handle-immediate} function is essential for parsing commands that require immediate operands. It extracts the necessary components from the instruction, performs the operation, updates the registers, and sets the appropriate CPU flags using \texttt{update-flags}. The \texttt{update-flags} function updates flags such as zero, sign, overflow, and carry, which are crucial for conditional branching and arithmetic operations.
+        
+        We structured our solution for the \textit{Data Processing: Register and Shifts} section by creating helper functions for logical shift left (\texttt{lsl}), logical shift right (\texttt{lsr}), arithmetic shift right (\texttt{asr}), and rotate right (\texttt{ror}). These functions take an unsigned 64-bit integer input value, shift amount, and a mode indicating 64-bit or 32-bit operations, applying the appropriate mask for each mode. The \texttt{apply-shift} function leverages these helpers to perform shifts based on a shift code, while the \texttt{handle-register} function processes instructions, extracts necessary fields (including the register indexes, operand, opc, opr etc.), and performs arithmetic or bitwise operations on the registers. 
+        
+        This modular approach enhances clarity, making it easier to test and debug individual components. We chose this design to ensure that each shift operation is encapsulated, maintaining an organised structure when reading and debugging the code.
+        
+        To handle Single Data Transfer Immediate instructions for a load/store unit, \texttt{handle-sdti} first extracts various fields from the instruction including operand, register indexes, and control bits. It then determines if the operation is a load (L=1) or store (L=0), signed (U=0) or unsigned (U=1), and data size (sf=1 for 64-bit, sf=0 for 32-bit). Based on these and other control bits, the function calculates the effective address for the memory operation using either an immediate offset, register offset, or a combination of both. Finally, it calls the \texttt{load-store} function to perform the actual load or store operation on the specified memory location.
+
+        For branching we used a helper function to extend an n-bit number to a 64-bit number along with a function to change the value of the program counter register(PC) depending on the instruction and the current state of the program. As the next instruction to execute is selected using the PC this effectively “jumps” using the branching instruction.
+
+        
+    \subsection{Code Reusability Analysis}
+        \textbf{Common Helper Functions} 
+        Both Data Processing and Single Data Transfer instructions can benefit from shared helper functions for extracting bit fields, performing bitwise operations (e.g., shift, rotate), and updating flags (zero, carry, etc.).
+        
+        \noindent \textbf{Instruction Encoding}
+        Logic for encoding basic instruction formats (opcode, operands, etc.) can potentially be reused across different instruction types with some variations for specific fields.
+
+\section{Team Dynamics}
+    \subsection{Current Team Performance Assessment}
+        Our group project experience has been characterized by a positive and productive atmosphere.  During the initial stages, we effectively identified each team member's key strengths and interests.  This knowledge helped build a well-balanced workload distribution, capitalizing on individual skill sets and ensuring timely project progress.  
+        
+        However, one initial hurdle involved coordinating team member schedules to establish consistent meeting times for collaborative tasks.  We discovered that working in smaller subgroups or pairs often led to more efficient task completion.
+
+        When dividing the code into separate modules (i.e., the .h and .c files), each team member had slightly different opinions. However, we engaged in thorough discussions to determine the most effective split and reached a consensus. This process required all team members to actively listen to one another and reference our C lectures and online resources. 
+    
+        While part 1 of the project allowed for a greater degree of independent work, we recognize the importance of maintaining daily check-ins to ensure seamless collaboration.  During the debugging phase, we implemented a system of check-ins, utilizing either Discord voice calls with screen sharing or in-person library meetings.  
+        
+        This collaborative environment made everyone feel comfortable, so they could openly ask questions and seek guidance from one another.  This proved particularly beneficial during the independent sections of Part 1, where team members could offer valuable insights for code improvement or bug resolution.
+
+    \subsection{Strategies for Adapting to Future Challenges}
+        While debugging, our collective effort was crucial, but we encountered instances of frustration due to extended periods of individual code analysis without significant progress.  To address this challenge, we adopted a new approach.  We convened as a team to jointly analyze the issues and brainstorm potential solutions. These problem-solving sessions not only accelerated the debugging process but also enhanced our understanding of the code and improved our teamwork.
+        
+        Looking ahead, as the project progresses and task complexity increases, we acknowledge the need to continually refine our collaborative strategies.  This will likely involve a combination of maintaining effective communication channels, adapting our working group sizes to suit specific tasks, and leveraging individual strengths for optimal project execution.
+
+\end{document}
